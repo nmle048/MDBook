@@ -26,7 +26,7 @@ passport.use(new LocalStrategy(function verify(username, password, cb) {
 
         crypto.pbkdf2(password, result.salt, 310000, 32, 'sha256', function(err, hashedPassword) {
             if (err) { return cb(err); }
-            if (!crypto.timingSafeEqual(result.hashed_password, hashedPassword)) {
+            if (result.password != hashedPassword.toString('hex')) {
                 return cb(null, false, {message: 'Sai tên đăng nhập hoặc mật khẩu.'});
             }
             return cb(null, result);
@@ -104,9 +104,10 @@ authRoutes.get('/login', function(req, res, next) {
  * a message informing them of what went wrong.
  */
 authRoutes.post('/login/password', passport.authenticate('local', {
-  successReturnToOrRedirect: '/',
+  //successReturnToOrRedirect: '/',
   failureRedirect: '/login',
-  failureMessage: true
+  failureMessage: true,
+  successMessage: 'Đăng nhập thành công'
 }));
 
 /* POST /logout
@@ -143,27 +144,34 @@ authRoutes.get('/signup', function(req, res, next) {
  * successfully created, the user is logged in.
  */
 authRoutes.post('/signup', function(req, res, next) {
-    let salt = crypto.randomBytes(16);
-    crypto.pbkdf2(req.body.password, salt, 310000, 32, 'sha256', function(err, hashedPassword) {
+  let db_connect = dbo.getDb('bookshop');
+  db_connect.collection('users').findOne({username: req.body.username}, function (err, user) {
     if (err) { return next(err); }
-    let db_connect = dbo.getDb('bookshop');
-    let user_object = {
-        username: req.body.username,
-        password: hashedPassword,
-        salt: salt
-    };
-    db_connect.collection('users').insertOne(user_object, function (err, result) {
+    if (user) { res.json('Tên đăng nhập đã tồn tại'); }
+    if (!user) {
+      let salt = crypto.randomBytes(16).toString('hex');
+      crypto.pbkdf2(req.body.password, salt, 310000, 32, 'sha256', function(err, hashedPassword) {
         if (err) { return next(err); }
-        let user = {
-            id: result._id,
-            username: req.body.username
+        let user_object = {
+          username: req.body.username,
+          password: hashedPassword.toString('hex'),
+          salt: salt
         };
-        req.login(user, function(err) {
+        db_connect.collection('users').insertOne(user_object, function (err, newUser) {
+          if (err) { return next(err); }
+          let user = {
+            id: newUser._id,
+            username: req.body.username
+          };
+          req.login(user, function (err) {
             if (err) { return next(err); }
-            res.json('User created and loged in.')
+            res.json('Tạo tài khoản và đăng nhập thành công.')
             //res.redirect('/');
+          });
         });
-    });
+      });
+    };
+  })
     // db.run('INSERT INTO users (username, hashed_password, salt) VALUES (?, ?, ?)', [
     //   req.body.username,
     //   hashedPassword,
@@ -179,7 +187,6 @@ authRoutes.post('/signup', function(req, res, next) {
     //     res.redirect('/');
     //   });
     // });
-  });
 });
 
 module.exports = authRoutes;

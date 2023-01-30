@@ -20,7 +20,7 @@ app.use(session({
     resave: false,
     saveUninitialized: false,
     store: MongoStore.create({
-        mongoUrl: process.env.ATLAS_URI,
+        mongoUrl: process.env.MONGO_SESS_URI,
     })
 }));
 app.use(passport.authenticate('session'));
